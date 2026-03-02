@@ -1,34 +1,21 @@
 'use client'
 
-import { MiniKit, VerificationLevel } from '@worldcoin/minikit-js'
+import { IDKit, orbLegacy } from '@worldcoin/idkit-core'
+import { MiniKit } from '@worldcoin/minikit-js'
 import { useState } from 'react'
+
+const APP_ID = process.env.NEXT_PUBLIC_APP_ID as `app_${string}`
+const ACTION = process.env.NEXT_PUBLIC_WORLD_ACTION || 'verify-trade'
 
 interface VerifyButtonProps {
   onVerified: (walletAddress: string) => void
 }
 
-const ERROR_MESSAGES: Record<string, string> = {
-  credential_unavailable:
-    'No Device credential found. In World App → World ID tab → tap "Tap to verify" to set up your Device credential, then try again.',
-  verification_rejected: 'You rejected the verification. Tap Verify and confirm in World App.',
-  max_verifications_reached:
-    'You have already verified the maximum number of times for this action.',
-  malformed_request: 'Bad request — please refresh and try again.',
-  invalid_network:
-    'Network mismatch. Make sure you are using the production World App (not Simulator).',
-  inclusion_proof_pending:
-    'Your credential is not yet on-chain. Wait ~1 hour after setting up Device verification, then try again.',
-  inclusion_proof_failed: 'Proof retrieval failed — please try again.',
-  user_rejected: 'You rejected the wallet connection. Tap Verify and confirm in World App.',
-}
-
 export function VerifyButton({ onVerified }: VerifyButtonProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [debugCode, setDebugCode] = useState<string | null>(null)
 
   async function handleVerify() {
-    // Guard: must be inside World App
     if (!MiniKit.isInstalled()) {
       setError('Open this app inside World App — it cannot run in a regular browser.')
       return
@@ -36,51 +23,72 @@ export function VerifyButton({ onVerified }: VerifyButtonProps) {
 
     setLoading(true)
     setError(null)
-    setDebugCode(null)
 
     try {
-      // Step 1: Connect wallet
+      // Step 1: walletAuth — get the user's wallet address
       const walletRes = await MiniKit.commandsAsync.walletAuth({
         nonce: crypto.randomUUID(),
         statement: 'Connect to PrivOTC to trade confidentially',
       })
 
       if (walletRes.finalPayload.status === 'error') {
-        const code = (walletRes.finalPayload as { error_code?: string }).error_code ?? 'unknown'
-        setDebugCode(code)
-        setError(ERROR_MESSAGES[code] ?? `Wallet connection failed (${code}). Please try again.`)
+        setError('Wallet connection failed. Please try again.')
         setLoading(false)
         return
       }
 
       const walletAddress = walletRes.finalPayload.address
 
-      // Step 2: World ID verify — Device level (no Orb required)
-      // TODO: Switch to VerificationLevel.Orb before final hackathon submission
-      const verifyRes = await MiniKit.commandsAsync.verify({
-        action: process.env.NEXT_PUBLIC_WORLD_ACTION || 'verify-trade',
-        signal: walletAddress,
-        verification_level: VerificationLevel.Device,
-      })
+      // Step 2: Fetch RP signature from backend (World ID 4.0 requirement)
+      const rpContext = await fetch('/api/rp-signature', { method: 'POST' }).then((r) => r.json())
 
-      if (verifyRes.finalPayload.status === 'error') {
-        const code = (verifyRes.finalPayload as { error_code?: string }).error_code ?? 'unknown'
-        setDebugCode(code)
-        setError(
-          ERROR_MESSAGES[code] ??
-            `World ID verification failed (${code}). Check World App is set up with a Device credential.`,
-        )
+      if (rpContext.error) {
+        setError('Server configuration error. Please contact support.')
         setLoading(false)
         return
       }
 
-      // Step 3: Validate proof on backend
+      // Step 3: IDKit + orbLegacy — World ID 4.0 correct path
+      // Inside World App this runs headlessly (no QR/widget shown)
+      const request = await IDKit.request({
+        app_id: APP_ID,
+        action: ACTION,
+        rp_context: rpContext,
+        allow_legacy_proofs: true,
+        environment: 'production',
+      }).preset(orbLegacy({ signal: walletAddress }))
+
+      const completion = await request.pollUntilCompletion()
+
+      if (!completion.success) {
+        const code = String(completion.error ?? 'unknown')
+        if (code.includes('credential_unavailable') || code.includes('Orb')) {
+          setError(
+            'Orb verification required. Visit a Worldcoin Orb location (worldcoin.org/find-orb) to get verified, then try again.',
+          )
+        } else if (code.includes('rejected') || code.includes('cancel')) {
+          setError('Verification cancelled. Tap Verify and confirm in World App.')
+        } else {
+          setError(`World ID verification failed (${code}). Make sure you are Orb-verified.`)
+        }
+        setLoading(false)
+        return
+      }
+
+      // Step 4: Backend proof validation
+      const result = completion.result as unknown as {
+        proof: string
+        merkle_root: string
+        nullifier_hash: string
+        verification_level: string
+      }
+
       const res = await fetch('/api/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          payload: verifyRes.finalPayload,
-          action: process.env.NEXT_PUBLIC_WORLD_ACTION || 'verify-trade',
+          payload: result,
+          action: ACTION,
           signal: walletAddress,
         }),
       })
@@ -90,11 +98,8 @@ export function VerifyButton({ onVerified }: VerifyButtonProps) {
       if (data.success) {
         onVerified(walletAddress)
       } else {
-        setError(
-          data.error === 'max_verifications_reached'
-            ? ERROR_MESSAGES.max_verifications_reached
-            : `Proof rejected by server: ${data.error ?? 'unknown error'}`,
-        )
+        const errMsg = typeof data.error === 'object' ? JSON.stringify(data.error) : (data.error ?? 'unknown')
+        setError(`Proof rejected: ${errMsg}`)
       }
     } catch (err) {
       setError('Unexpected error — please refresh and try again.')
@@ -114,12 +119,7 @@ export function VerifyButton({ onVerified }: VerifyButtonProps) {
         {loading ? 'Verifying...' : 'Verify with World ID'}
       </button>
       {error && (
-        <div className="flex flex-col items-center gap-1 max-w-xs">
-          <p className="text-red-500 text-xs text-center">{error}</p>
-          {debugCode && (
-            <p className="text-gray-400 text-[10px] font-mono">error_code: {debugCode}</p>
-          )}
-        </div>
+        <p className="text-red-500 text-xs text-center max-w-xs">{error}</p>
       )}
     </div>
   )
