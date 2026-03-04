@@ -15,6 +15,16 @@
 #     secrets-path: "../secrets.yaml"       # Path to secrets file (project root by default)
 
 # ==========================================================================
+# PrivOTC Workflow Target
+privotc-staging:
+  user-workflow:
+    workflow-name: "privotc-confidential-trading"
+  workflow-artifacts:
+    workflow-path: "./privotc-workflow.ts"
+    config-path: "./privotc-config.json"
+    secrets-path: ""
+
+# ==========================================================================
 staging-settings:
   user-workflow:
     workflow-name: "cre-multi-chain-token-manager"
