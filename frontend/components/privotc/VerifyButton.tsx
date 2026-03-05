@@ -11,7 +11,7 @@ const ACTION = process.env.NEXT_PUBLIC_WORLD_ACTION || 'verify-trade'
 const ENVIRONMENT = (process.env.NEXT_PUBLIC_WORLD_ENVIRONMENT || 'staging') as 'staging' | 'production'
 
 interface VerifyButtonProps {
-  onVerified: (nullifierHash: string) => void
+  onVerified: (nullifierHash: string, proof?: any) => void
 }
 
 export function VerifyButton({ onVerified }: VerifyButtonProps) {
@@ -71,7 +71,7 @@ export function VerifyButton({ onVerified }: VerifyButtonProps) {
       }
 
       const nullifier = (completion.result as { nullifier_hash?: string }).nullifier_hash ?? signal
-      onVerified(nullifier)
+      onVerified(nullifier, completion.result) // Pass full proof object
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
       setError(err instanceof Error ? err.message : 'Unexpected error — please try again.')

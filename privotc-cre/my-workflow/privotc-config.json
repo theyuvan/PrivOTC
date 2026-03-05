@@ -6,5 +6,9 @@
   "otcSettlementAddress": "0x0000000000000000000000000000000000000000",
   "proofVerifierAddress": "0x0000000000000000000000000000000000000000",
   "tokenPairs": ["ETH/USDC", "WBTC/USDC", "WETH/DAI"],
-  "chainName": "ethereum-testnet-sepolia"
+  "chainName": "ethereum-testnet-sepolia",
+  "gasLimit": "500000",
+  "frontendApiUrl": "http://localhost:3000/api/trade",
+  "zkVerifierUrl": "http://localhost:4000/verify",
+  "adminApiKey": "hackathon-demo-2026"
 }
