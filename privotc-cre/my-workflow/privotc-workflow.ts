@@ -534,14 +534,24 @@ const executeSettlement = (runtime: Runtime<Config>, match: MatchedPair): { txHa
 			.join('')
 			.padEnd(64, '0')}` as Hex;
 
+		// Convert a decimal or hex string to a proper bytes32 hex value
+		const toBytes32 = (value: string): Hex => {
+			try {
+				return `0x${BigInt(value).toString(16).padStart(64, '0')}` as Hex;
+			} catch {
+				const hex = value.startsWith('0x') ? value.slice(2) : Array.from(new TextEncoder().encode(value)).map(b => b.toString(16).padStart(2, '0')).join('');
+				return `0x${hex.padStart(64, '0').slice(0, 64)}` as Hex;
+			}
+		};
+
 		// Prepare settlement transaction data
 		const settlementData = encodeFunctionData({
 			abi: OTCSettlement,
 			functionName: 'executeSettlement',
 			args: [
 				matchIdHash,
-				match.buyOrder.walletCommitment as Hex,
-				match.sellOrder.walletCommitment as Hex,
+				toBytes32(match.buyOrder.walletCommitment),
+				toBytes32(match.sellOrder.walletCommitment),
 				BigInt(Math.floor(parseFloat(match.matchAmount) * 1e18)), // Amount in wei
 				BigInt(Math.floor(parseFloat(match.matchPrice) * 1e6)), // Price in USDC (6 decimals)
 				config.otcSettlementAddress as Address, // Token pair contract address

@@ -1,6 +1,6 @@
 import { http, createConfig } from 'wagmi'
 import { defineChain } from 'viem'
-import { injected, walletConnect } from 'wagmi/connectors'
+import { injected } from 'wagmi/connectors'
 
 // Define Tenderly Virtual TestNet chains
 export const tenderlyEthereum = defineChain({
@@ -57,15 +57,6 @@ export const config = createConfig({
   chains: [tenderlyEthereum, tenderlyWorldChain],
   connectors: [
     injected(),
-    walletConnect({
-      projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'demo',
-      metadata: {
-        name: 'PrivOTC',
-        description: 'Private OTC Trading Platform',
-        url: 'https://privotc.app',
-        icons: [],
-      },
-    }),
   ],
   transports: {
     [tenderlyEthereum.id]: http(),

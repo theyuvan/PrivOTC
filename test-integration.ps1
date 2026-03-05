@@ -33,7 +33,7 @@ try {
 # Test 3: Verify CRE Config
 Write-Host ""
 Write-Host "3️⃣  Verifying CRE Configuration..." -ForegroundColor Yellow
-$config = Get-Content "c:\Users\thame\chain.link\privotc-cre\my-workflow\privotc-config.json" | ConvertFrom-Json
+$config = Get-Content "$PSScriptRoot\privotc-cre\my-workflow\privotc-config.json" | ConvertFrom-Json
 
 if ($config.otcSettlementAddress -eq "0x0000000000000000000000000000000000000000") {
     Write-Host "   ❌ Settlement address not configured!" -ForegroundColor Red
@@ -53,9 +53,9 @@ Write-Host "   ✅ Tenderly RPC configured" -ForegroundColor Green
 # Test 4: Check ZK Circuit Artifacts
 Write-Host ""
 Write-Host "4️⃣  Checking ZK Circuit Artifacts..." -ForegroundColor Yellow
-$zkeyPath = "c:\Users\thame\chain.link\zk-circuits\build\balanceProof_final.zkey"
-$wasmPath = "c:\Users\thame\chain.link\zk-circuits\build\balanceProof_js\balanceProof.wasm"
-$vkeyPath = "c:\Users\thame\chain.link\zk-circuits\build\verification_key.json"
+$zkeyPath = "$PSScriptRoot\zk-circuits\build\balanceProof_final.zkey"
+$wasmPath = "$PSScriptRoot\zk-circuits\build\balanceProof_js\balanceProof.wasm"
+$vkeyPath = "$PSScriptRoot\zk-circuits\build\verification_key.json"
 
 if (Test-Path $zkeyPath) {
     $zkeySize = (Get-Item $zkeyPath).Length / 1MB

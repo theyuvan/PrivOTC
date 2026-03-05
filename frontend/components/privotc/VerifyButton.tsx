@@ -135,6 +135,7 @@ export function VerifyButton({ onVerified }: VerifyButtonProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-sm"
+            onClick={handleClose}
           >
             <motion.div
               initial={{ scale: 0.92, opacity: 0 }}
@@ -142,6 +143,7 @@ export function VerifyButton({ onVerified }: VerifyButtonProps) {
               exit={{ scale: 0.92, opacity: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 25 }}
               className="relative border-2 border-foreground bg-background p-0 w-full max-w-sm mx-4"
+              onClick={(e) => e.stopPropagation()}
             >
               {/* Modal header */}
               <div className="flex items-center justify-between border-b-2 border-foreground px-4 py-3">

@@ -50,7 +50,7 @@ export function OrderCreate() {
       const tradeId = keccak256(
         encodePacked(
           ['address', 'uint256', 'uint256'],
-          [address, BigInt(timestamp), BigInt(Math.random() * 1000000)]
+          [address, BigInt(timestamp), BigInt(Math.floor(Math.random() * 1000000))]
         )
       )
 
