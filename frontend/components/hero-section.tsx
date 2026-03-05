@@ -7,7 +7,7 @@ import { motion } from "framer-motion"
 const ease = [0.22, 1, 0.36, 1] as const
 
 interface HeroSectionProps {
-  onVerified?: (nullifierHash: string) => void
+  onVerified: (nullifierHash: string, proof?: any) => void
 }
 
 export function HeroSection({ onVerified }: HeroSectionProps) {

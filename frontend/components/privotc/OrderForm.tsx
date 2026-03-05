@@ -13,10 +13,11 @@ const EXPIRY_OPTIONS = [
 
 interface OrderFormProps {
   nullifierHash: string
+  worldIdProof?: any // Full World ID proof from verification
   onOrderSubmitted: (tradeId: string) => void
 }
 
-export function OrderForm({ nullifierHash, onOrderSubmitted }: OrderFormProps) {
+export function OrderForm({ nullifierHash, worldIdProof, onOrderSubmitted }: OrderFormProps) {
   const [side, setSide] = useState<'buy' | 'sell'>('buy')
   const [tokenPair, setTokenPair] = useState('ETH/USDC')
   const [amount, setAmount] = useState('')
@@ -31,40 +32,65 @@ export function OrderForm({ nullifierHash, onOrderSubmitted }: OrderFormProps) {
     setError(null)
 
     try {
-      const tradeIntent = {
-        side,
-        tokenPair,
-        amount: parseFloat(amount),
-        price: parseFloat(price),
-        expiry,
-        nullifierHash,
-        timestamp: Date.now(),
+      // Generate REAL ZK proof via backend API
+      setError('Generating ZK proof...')
+      const zkRes = await fetch('http://localhost:4000/generate-proof', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          balance: '10000000000000000000', // 10 ETH demo balance (should come from wallet in production)
+          walletCommitment: nullifierHash.slice(0, 16), // Use part of World ID nullifier
+          minPrice: Math.floor(parseFloat(price) * 1000000).toString(),
+          amount: Math.floor(parseFloat(amount) * 1e18).toString(),
+          tokenId: '1',
+        }),
+      })
+
+      if (!zkRes.ok) {
+        throw new Error('Failed to generate ZK proof')
       }
 
-      // Encrypt intent client-side (base64 placeholder — replace with real encryption)
-      const encryptedIntent = btoa(JSON.stringify(tradeIntent))
+      const zkData = await zkRes.json()
+      if (!zkData.success) {
+        throw new Error(zkData.error || 'ZK proof generation failed')
+      }
 
-      // Hash the intent to store on-chain
-      const encoder = new TextEncoder()
-      const data = encoder.encode(encryptedIntent)
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-      const hashArray = Array.from(new Uint8Array(hashBuffer))
-      const intentHash = '0x' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+      setError('ZK proof generated! Submitting trade...')
+
+      // Require REAL World ID proof - no fallback!
+      if (!worldIdProof) {
+        throw new Error('World ID verification required. Please scan QR code with World App first.')
+      }
+
+      const worldIdData = worldIdProof
+
+      const tradeData = {
+        worldIdProof: worldIdData,
+        zkProof: zkData.proof,
+        publicSignals: zkData.publicSignals,
+        trade: {
+          side,
+          tokenPair,
+          amount,
+          price,
+        },
+        timestamp: Date.now(),
+      }
 
       const res = await fetch('/api/trade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ encryptedIntent, intentHash, walletAddress: nullifierHash }),
+        body: JSON.stringify(tradeData),
       })
 
       const result = await res.json()
-      if (result.tradeId) {
-        onOrderSubmitted(result.tradeId)
+      if (result.tradeId || result.success) {
+        onOrderSubmitted(result.tradeId || `trade-${Date.now()}`)
       } else {
         setError('Failed to submit order. Please try again.')
       }
     } catch (err) {
-      setError('Something went wrong while submitting your order.')
+      setError(err instanceof Error ? err.message : 'Something went wrong while submitting your order.')
       console.error(err)
     } finally {
       setSubmitting(false)

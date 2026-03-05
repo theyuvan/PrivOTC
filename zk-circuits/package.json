@@ -1,0 +1,31 @@
+{
+  "name": "privotc-zk-circuits",
+  "version": "1.0.0",
+  "description": "Zero-Knowledge proof circuits for PrivOTC balance verification",
+  "scripts": {
+    "compile": "bash scripts/compile.sh",
+    "setup": "bash scripts/setup.sh",
+    "generate-verifier": "bash scripts/generate-verifier.sh",
+    "test": "node test/test-proof.js",
+    "verifier": "tsx verifier-api.ts"
+  },
+  "keywords": [
+    "zk-snark",
+    "circom",
+    "privacy",
+    "balance-proof"
+  ],
+  "author": "PrivOTC Team - Dev 3",
+  "license": "MIT",
+  "dependencies": {
+    "circomlib": "^2.0.5",
+    "snarkjs": "^0.7.4",
+    "ffjavascript": "^0.3.0",
+    "express": "^4.18.2",
+    "@types/express": "^4.17.21"
+  },
+  "devDependencies": {
+    "circom_tester": "^0.0.19",
+    "tsx": "^4.7.0"
+  }
+}

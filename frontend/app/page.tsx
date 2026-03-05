@@ -15,10 +15,12 @@ type AppState = 'landing' | 'trade' | 'status'
 export default function Page() {
   const [appState, setAppState] = useState<AppState>('landing')
   const [nullifierHash, setNullifierHash] = useState<string | null>(null)
+  const [worldIdProof, setWorldIdProof] = useState<any>(null)
   const [tradeId, setTradeId] = useState<string | null>(null)
 
-  function handleVerified(hash: string) {
+  function handleVerified(hash: string, proof?: any) {
     setNullifierHash(hash)
+    setWorldIdProof(proof)
     setAppState('trade')
   }
 
@@ -81,6 +83,7 @@ export default function Page() {
             {appState === 'trade' && nullifierHash && (
               <OrderForm
                 nullifierHash={nullifierHash}
+                worldIdProof={worldIdProof}
                 onOrderSubmitted={handleOrderSubmitted}
               />
             )}

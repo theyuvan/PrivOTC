@@ -1,0 +1,22 @@
+# Ignore node modules
+node_modules/
+
+# Ignore build outputs
+build/
+dist/
+
+# Ignore ZK circuit artifacts
+*.r1cs
+*.wasm
+*.wtns
+*.zkey
+*.ptau
+*.sym
+witness.json
+proof.json
+public.json
+calldata.txt
+
+# Keep verification key for CRE (but can regenerate)
+# Remove this line if you want to keep it in git
+# build/verification_key.json
