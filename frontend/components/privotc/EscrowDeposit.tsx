@@ -7,11 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import type { Match } from '@/app/api/matches/route'
-
-// ── Addresses ──────────────────────────────────────────────────────────────
-const ESCROW_ADDRESS = '0x32CB383405f866a84e42345aDb10b00228f52B3f' as `0x${string}`
-const WLD_ADDRESS = '0x163f8C2467924be0ae7B5347228CABF260318753' as `0x${string}`
+import { CHAIN_CONFIG } from '@/lib/chainConfig'
 
 // ── Minimal ABIs ────────────────────────────────────────────────────────────
 const ERC20_ABI = parseAbi([
@@ -54,14 +50,36 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
 
+  // Get chain-specific config
+  const chainType = (match.chain || 'ethereum') as 'ethereum' | 'worldChain'
+  const config = CHAIN_CONFIG[chainType]
+  const ESCROW_ADDRESS = config.escrow as `0x${string}`
+  
+  // Determine which token is being traded (same token for both parties)
+  const tradingToken = (match.token || 'ETH') as 'ETH' | 'WLD'
+  const isETHTrade = tradingToken === 'ETH'
+  
+  // Check if WLD token exists on this chain
+  const wldTokenExists = chainType === 'worldChain' && config.wldToken?.address
+  const WLD_ADDRESS = wldTokenExists 
+    ? (config.wldToken?.address as `0x${string}`) 
+    : undefined
+
   const [step, setStep] = useState<Step>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const [settleTxHash, setSettleTxHash] = useState('')
   const [myEscrowId, setMyEscrowId] = useState<`0x${string}` | null>(null)
 
+  // Detect if this match requires WLD on a chain where it doesn't exist
+  const hasInvalidToken = !isETHTrade && !wldTokenExists
+
   const isBuyer = address?.toLowerCase() === match.buyerAddress.toLowerCase()
   const isSeller = address?.toLowerCase() === match.sellerAddress.toLowerCase()
   const role = isBuyer ? 'buyer' : isSeller ? 'seller' : null
+  
+  // Calculate deposit amounts (both parties use same token)
+  const buyerAmount = isETHTrade ? match.ethAmount : match.wldAmount
+  const sellerAmount = isETHTrade ? match.ethAmount : match.wldAmount
 
   const { remaining, label: countdown } = useCountdown(match.deadline)
 
@@ -90,6 +108,8 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
           sellerAddress: match.sellerAddress,
           ethAmount: match.ethAmount,
           wldAmount: match.wldAmount,
+          chain: match.chain || 'ethereum',
+          token: match.token || 'ETH', // Pass the trading token
         }),
       })
       const data = await res.json()
@@ -109,38 +129,97 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
     return () => clearInterval(id)
   }, [step, pollEscrow])
 
-  // ── Buyer flow: approve WLD → deposit WLD ──────────────────────────────
+  // ── Buyer deposit flow (ETH or WLD depending on tradingToken) ──────────
   const handleBuyerDeposit = async () => {
     if (!address || !publicClient || !myEscrowId) return
     setErrorMsg('')
 
     try {
-      // 1. Approve WLD
-      setStep('approving')
-      const approveTx = await writeContractAsync({
-        address: WLD_ADDRESS,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [ESCROW_ADDRESS, BigInt(match.wldAmount)],
-      })
-      await publicClient.waitForTransactionReceipt({ hash: approveTx })
+      console.log('\n════════════════════════════════════════════════════')
+      console.log('💰 BUYER DEPOSIT STARTING')
+      console.log('════════════════════════════════════════════════════')
+      console.log('Role:', 'BUYER')
+      console.log('Token:', tradingToken)
+      console.log('Amount:', formatEther(BigInt(buyerAmount)), tradingToken)
+      console.log('Chain:', config.name)
+      console.log('Escrow ID:', myEscrowId)
+      console.log('────────────────────────────────────────────────────')
+      
+      if (isETHTrade) {
+        // ETH trade: Deposit native ETH (no approval needed)
+        console.log('⏳ Depositing ETH to escrow...')
+        setStep('depositing')
+        const depositTx = await writeContractAsync({
+          address: ESCROW_ADDRESS,
+          abi: ESCROW_ABI,
+          functionName: 'deposit',
+          args: [
+            myEscrowId,
+            '0x0000000000000000000000000000000000000000' as `0x${string}`,
+            BigInt(buyerAmount),
+            BigInt(match.deadline),
+          ],
+          value: BigInt(buyerAmount),
+        })
+        console.log('📝 Transaction submitted!')
+        console.log('   Tx Hash:', depositTx)
+        console.log('⏳ Waiting for confirmation...')
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: depositTx })
+        if (receipt.status === 'reverted') throw new Error('Deposit transaction reverted on-chain')
+        console.log('✅ BUYER DEPOSIT CONFIRMED')
+        console.log('   Block:', receipt.blockNumber.toString())
+        console.log('   Gas Used:', receipt.gasUsed.toString())
+        console.log('   Status:', receipt.status)
+        console.log('════════════════════════════════════════════════════\n')
+      } else {
+        // WLD trade: Approve WLD → Deposit WLD
+        if (!WLD_ADDRESS) {
+          setErrorMsg('WLD token not available on this chain')
+          setStep('error')
+          return
+        }
+        
+        console.log('⏳ [1/2] Approving WLD spend...')
+        setStep('approving')
+        const approveTx = await writeContractAsync({
+          address: WLD_ADDRESS,
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [ESCROW_ADDRESS, BigInt(buyerAmount)],
+        })
+        console.log('📝 Approval transaction submitted!')
+        console.log('   Tx Hash:', approveTx)
+        console.log('⏳ Waiting for approval confirmation...')
+        const approvalReceipt = await publicClient.waitForTransactionReceipt({ hash: approveTx })
+        console.log('✅ Approval confirmed!')
+        console.log('   Block:', approvalReceipt.blockNumber.toString())
+        console.log('   Gas Used:', approvalReceipt.gasUsed.toString())
+        console.log('────────────────────────────────────────────────────')
 
-      // 2. Deposit WLD into escrow using per-party escrow ID
-      // (OTCSettlement.settle reads keccak256(tradeId, address) so we must deposit with that key)
-      setStep('depositing')
-      const depositTx = await writeContractAsync({
-        address: ESCROW_ADDRESS,
-        abi: ESCROW_ABI,
-        functionName: 'deposit',
-        args: [
-          myEscrowId,
-          WLD_ADDRESS,
-          BigInt(match.wldAmount),
-          BigInt(match.deadline),
-        ],
-      })
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: depositTx })
-      if (receipt.status === 'reverted') throw new Error('Deposit transaction reverted on-chain')
+        console.log('⏳ [2/2] Depositing WLD to escrow...')
+        setStep('depositing')
+        const depositTx = await writeContractAsync({
+          address: ESCROW_ADDRESS,
+          abi: ESCROW_ABI,
+          functionName: 'deposit',
+          args: [
+            myEscrowId,
+            WLD_ADDRESS,
+            BigInt(buyerAmount),
+            BigInt(match.deadline),
+          ],
+        })
+        console.log('📝 Deposit transaction submitted!')
+        console.log('   Tx Hash:', depositTx)
+        console.log('⏳ Waiting for confirmation...')
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: depositTx })
+        if (receipt.status === 'reverted') throw new Error('Deposit transaction reverted on-chain')
+        console.log('✅ BUYER DEPOSIT CONFIRMED')
+        console.log('   Block:', receipt.blockNumber.toString())
+        console.log('   Gas Used:', receipt.gasUsed.toString())
+        console.log('   Status:', receipt.status)
+        console.log('════════════════════════════════════════════════════\n')
+      }
 
       setStep('waiting')
     } catch (err: any) {
@@ -149,28 +228,97 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
     }
   }
 
-  // ── Seller flow: deposit ETH ─────────────────────────────────────────────
+  // ── Seller deposit flow (ETH or WLD depending on tradingToken) ─────────
   const handleSellerDeposit = async () => {
     if (!address || !publicClient || !myEscrowId) return
     setErrorMsg('')
 
     try {
-      setStep('depositing')
-      // Use per-party escrow ID so buyer/seller have separate escrow slots
-      const depositTx = await writeContractAsync({
-        address: ESCROW_ADDRESS,
-        abi: ESCROW_ABI,
-        functionName: 'deposit',
-        args: [
-          myEscrowId,
-          '0x0000000000000000000000000000000000000000' as `0x${string}`,
-          BigInt(match.ethAmount),
-          BigInt(match.deadline),
-        ],
-        value: BigInt(match.ethAmount),
-      })
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: depositTx })
-      if (receipt.status === 'reverted') throw new Error('Deposit transaction reverted on-chain')
+      console.log('\n════════════════════════════════════════════════════')
+      console.log('💰 SELLER DEPOSIT STARTING')
+      console.log('════════════════════════════════════════════════════')
+      console.log('Role:', 'SELLER')
+      console.log('Token:', tradingToken)
+      console.log('Amount:', formatEther(BigInt(sellerAmount)), tradingToken)
+      console.log('Chain:', config.name)
+      console.log('Escrow ID:', myEscrowId)
+      console.log('────────────────────────────────────────────────────')
+      
+      if (isETHTrade) {
+        // ETH trade: Deposit native ETH (no approval needed)
+        console.log('⏳ Depositing ETH to escrow...')
+        setStep('depositing')
+        const depositTx = await writeContractAsync({
+          address: ESCROW_ADDRESS,
+          abi: ESCROW_ABI,
+          functionName: 'deposit',
+          args: [
+            myEscrowId,
+            '0x0000000000000000000000000000000000000000' as `0x${string}`,
+            BigInt(sellerAmount),
+            BigInt(match.deadline),
+          ],
+          value: BigInt(sellerAmount),
+        })
+        console.log('📝 Transaction submitted!')
+        console.log('   Tx Hash:', depositTx)
+        console.log('⏳ Waiting for confirmation...')
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: depositTx })
+        if (receipt.status === 'reverted') throw new Error('Deposit transaction reverted on-chain')
+        console.log('✅ SELLER DEPOSIT CONFIRMED')
+        console.log('   Block:', receipt.blockNumber.toString())
+        console.log('   Gas Used:', receipt.gasUsed.toString())
+        console.log('   Status:', receipt.status)
+        console.log('════════════════════════════════════════════════════\n')
+      } else {
+        // WLD trade: Approve WLD → Deposit WLD
+        if (!WLD_ADDRESS) {
+          setErrorMsg('WLD token not available on this chain')
+          setStep('error')
+          return
+        }
+        
+        console.log('⏳ [1/2] Approving WLD spend...')
+        setStep('approving')
+        const approveTx = await writeContractAsync({
+          address: WLD_ADDRESS,
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [ESCROW_ADDRESS, BigInt(sellerAmount)],
+        })
+        console.log('📝 Approval transaction submitted!')
+        console.log('   Tx Hash:', approveTx)
+        console.log('⏳ Waiting for approval confirmation...')
+        const approvalReceipt = await publicClient.waitForTransactionReceipt({ hash: approveTx })
+        console.log('✅ Approval confirmed!')
+        console.log('   Block:', approvalReceipt.blockNumber.toString())
+        console.log('   Gas Used:', approvalReceipt.gasUsed.toString())
+        console.log('────────────────────────────────────────────────────')
+
+        console.log('⏳ [2/2] Depositing WLD to escrow...')
+        setStep('depositing')
+        const depositTx = await writeContractAsync({
+          address: ESCROW_ADDRESS,
+          abi: ESCROW_ABI,
+          functionName: 'deposit',
+          args: [
+            myEscrowId,
+            WLD_ADDRESS,
+            BigInt(sellerAmount),
+            BigInt(match.deadline),
+          ],
+        })
+        console.log('📝 Deposit transaction submitted!')
+        console.log('   Tx Hash:', depositTx)
+        console.log('⏳ Waiting for confirmation...')
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: depositTx })
+        if (receipt.status === 'reverted') throw new Error('Deposit transaction reverted on-chain')
+        console.log('✅ SELLER DEPOSIT CONFIRMED')
+        console.log('   Block:', receipt.blockNumber.toString())
+        console.log('   Gas Used:', receipt.gasUsed.toString())
+        console.log('   Status:', receipt.status)
+        console.log('════════════════════════════════════════════════════\n')
+      }
 
       setStep('waiting')
     } catch (err: any) {
@@ -209,8 +357,13 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
     )
   }
 
-  const ethDisplay = `${Number(formatEther(BigInt(match.ethAmount))).toFixed(4)} ETH`
-  const wldDisplay = `${Number(formatEther(BigInt(match.wldAmount))).toFixed(2)} WLD`
+  const buyerDisplay = isETHTrade 
+    ? `${Number(formatEther(BigInt(buyerAmount))).toFixed(4)} ETH`
+    : `${Number(formatEther(BigInt(buyerAmount))).toFixed(2)} WLD`
+  
+  const sellerDisplay = isETHTrade
+    ? `${Number(formatEther(BigInt(sellerAmount))).toFixed(4)} ETH`
+    : `${Number(formatEther(BigInt(sellerAmount))).toFixed(2)} WLD`
 
   return (
     <Card className="border-orange-500/40 bg-orange-500/5">
@@ -228,9 +381,9 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
       <CardContent className="space-y-4">
         {/* Match details */}
         <div className="text-xs font-mono space-y-1 text-muted-foreground">
-          <div>Pair: <span className="text-foreground">{match.tokenPair}</span></div>
-          <div>ETH amount: <span className="text-foreground">{ethDisplay}</span></div>
-          <div>WLD amount: <span className="text-foreground">{wldDisplay}</span></div>
+          <div>Token: <span className="text-foreground">{tradingToken}</span></div>
+          <div>Buyer amount: <span className="text-foreground">{buyerDisplay}</span></div>
+          <div>Seller amount: <span className="text-foreground">{sellerDisplay}</span></div>
           <div>Your role: <span className="text-orange-400 font-semibold">{role.toUpperCase()}</span></div>
           <div>Counterparty: <span className="text-foreground font-mono text-[10px]">
             {isBuyer ? match.sellerAddress : match.buyerAddress}
@@ -243,23 +396,39 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
         {/* What you need to deposit */}
         <div className="rounded-md border border-orange-500/20 p-3 text-sm bg-background">
           {isBuyer ? (
-            <p>You are the <strong>BUYER</strong>. Deposit <strong className="text-orange-400">{wldDisplay}</strong> into escrow to receive <strong className="text-green-400">{ethDisplay}</strong>.</p>
+            <p>You are the <strong>BUYER</strong>. Deposit <strong className="text-orange-400">{buyerDisplay}</strong> into escrow for this privacy transfer.</p>
           ) : (
-            <p>You are the <strong>SELLER</strong>. Deposit <strong className="text-orange-400">{ethDisplay}</strong> into escrow to receive <strong className="text-green-400">{wldDisplay}</strong>.</p>
+            <p>You are the <strong>SELLER</strong>. Deposit <strong className="text-orange-400">{sellerDisplay}</strong> into escrow for this privacy transfer.</p>
           )}
+          <p className="text-xs text-muted-foreground mt-2">
+            💭 Both parties use <strong>{tradingToken}</strong> • Privacy-preserving P2P transfer
+          </p>
         </div>
 
+        {/* Invalid token warning */}
+        {hasInvalidToken && (
+          <Alert variant="destructive">
+            <AlertDescription className="text-xs">
+              <strong>⚠️ Token Not Available</strong><br />
+              WLD token is not available on {config.name}. This match cannot be executed.<br />
+              <span className="text-[10px] mt-1 block text-muted-foreground">
+                Tip: Select <strong>WLD</strong> token to automatically use World Chain where WLD exists.
+              </span>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Action area */}
-        {step === 'idle' && remaining > 0 && (
+        {step === 'idle' && remaining > 0 && !hasInvalidToken && (
           <>
             {isBuyer && (
               <Button onClick={handleBuyerDeposit} className="w-full">
-                Approve &amp; Deposit {wldDisplay} WLD
+                {isETHTrade ? `Deposit ${buyerDisplay}` : `Approve & Deposit ${buyerDisplay}`}
               </Button>
             )}
             {isSeller && (
               <Button onClick={handleSellerDeposit} className="w-full">
-                Deposit {ethDisplay} ETH to Escrow
+                {isETHTrade ? `Deposit ${sellerDisplay}` : `Approve & Deposit ${sellerDisplay}`}
               </Button>
             )}
           </>
@@ -267,7 +436,7 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
 
         {step === 'approving' && (
           <div className="text-xs font-mono text-yellow-400 animate-pulse">
-            [1/2] Approving WLD spend…
+            [1/2] Approving {tradingToken} spend…
           </div>
         )}
 
