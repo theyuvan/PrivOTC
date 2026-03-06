@@ -48,6 +48,17 @@ dist/
 build/
 out/
 artifacts/
+
+# Documentation (local development notes)
+AI_MATCHING_AGENT.md
+AI_UPGRADE_GUIDE.md
+AUTO_MATCHING_SERVICE.md
+CRE_AUTO_TRIGGER_GUIDE.md
+CRE_COMMAND_NOT_FOUND_FIX.md
+DEPLOYMENT_QUICK_START.md
+DEPLOYMENT_SUMMARY.md
+DEV1_SUMMARY.md
+DUAL_CHAIN_SETUP.md
 cache/
 typechain-types/
 
