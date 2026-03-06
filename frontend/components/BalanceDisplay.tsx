@@ -6,9 +6,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Wallet, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useEffect, useState } from 'react'
+import { CHAIN_CONFIG } from '@/lib/chainConfig'
 
 // WLD Token Contract Address
-const WLD_TOKEN_ADDRESS = '0x2cfc85d8e48f8eab294be644d9e25c3030863003' as `0x${string}`
+const WLD_TOKEN_ADDRESS = CHAIN_CONFIG.worldChain.wldToken.address as `0x${string}`
 
 // ERC-20 ABI for balanceOf
 const ERC20_ABI = [
