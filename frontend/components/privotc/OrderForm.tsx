@@ -5,8 +5,9 @@ import { motion } from 'framer-motion'
 import { Lock, ArrowRight } from 'lucide-react'
 import { useAccount, useBalance, useWriteContract, usePublicClient } from 'wagmi'
 import { tenderlyEthereum } from '@/lib/web3Config'
+import { CHAIN_CONFIG } from '@/lib/chainConfig'
 
-const OTC_SETTLEMENT_ADDRESS = '0x7f8e2f2685c84aECA45CF6d6bfb1663781B9813A' as const
+const OTC_SETTLEMENT_ADDRESS = CHAIN_CONFIG.ethereum.settlement as const
 
 const SUBMIT_PROOF_ABI = [
   {
@@ -23,7 +24,7 @@ const SUBMIT_PROOF_ABI = [
   },
 ] as const
 
-const TOKEN_PAIRS = ['ETH/WLD']
+const TOKENS = ['ETH', 'WLD'] as const
 const EXPIRY_OPTIONS = [
   { label: '1 hour', value: '1h' },
   { label: '6 hours', value: '6h' },
@@ -38,12 +39,18 @@ interface OrderFormProps {
 
 export function OrderForm({ nullifierHash, worldIdProof, onOrderSubmitted }: OrderFormProps) {
   const [side, setSide] = useState<'buy' | 'sell'>('buy')
-  const [tokenPair, setTokenPair] = useState('ETH/WLD')
+  const [token, setToken] = useState<'ETH' | 'WLD'>('ETH')
   const [amount, setAmount] = useState('')
   const [price, setPrice] = useState('')
   const [expiry, setExpiry] = useState('1h')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Auto-detect chain based on selected token
+  // ETH → Ethereum Chain
+  // WLD → World Chain
+  const chain = token === 'WLD' ? 'worldChain' : 'ethereum'
+  const chainName = token === 'WLD' ? 'World Chain' : 'Ethereum'
 
   // Fetch real on-chain balance from Tenderly Virtual TestNet
   const { address } = useAccount()
@@ -61,7 +68,7 @@ export function OrderForm({ nullifierHash, worldIdProof, onOrderSubmitted }: Ord
 
     try {
       console.log('─── PrivOTC Order Submission ───────────────────────')
-      console.log('[1/6] Trade inputs:', { side, tokenPair, amount, price, expiry })
+      console.log('[1/6] Trade inputs:', { side, token, amount, price, expiry })
 
       // ── Step 1: On-chain balance ──────────────────────────
       setError('Fetching on-chain balance...')
@@ -179,10 +186,13 @@ export function OrderForm({ nullifierHash, worldIdProof, onOrderSubmitted }: Ord
         console.log('      Status:', receipt.status)
         setError('On-chain ZK proof verified! Checking World ID...')
       } catch (zkOnChainErr: any) {
-        // If wallet not available in demo / simulation mode, log and continue
-        console.warn('      ⚠️  On-chain proof tx failed (demo mode may not have signer):', zkOnChainErr?.shortMessage ?? zkOnChainErr?.message)
-        console.warn('      Continuing in simulation mode without on-chain submission.')
-        setError('ZK proof generated (simulation mode). Checking World ID...')
+        // ZK proof submission is REQUIRED for settlement
+        console.error('      ❌ On-chain proof submission FAILED:', zkOnChainErr?.shortMessage ?? zkOnChainErr?.message)
+        if (zkOnChainErr?.message?.includes('User denied') || zkOnChainErr?.message?.includes('rejected')) {
+          throw new Error('❌ PROOF SUBMISSION REQUIRED: You must approve the ZK proof transaction to submit a trade. Without it, settlement cannot execute.')
+        }
+        console.error('      Settlement will fail without on-chain proof!')
+        throw new Error(`Failed to submit ZK proof on-chain: ${zkOnChainErr?.shortMessage ?? zkOnChainErr?.message}. Settlement requires this proof.`)
       }
 
       // ── Step 5: World ID check ────────────────────────────
@@ -206,13 +216,17 @@ export function OrderForm({ nullifierHash, worldIdProof, onOrderSubmitted }: Ord
         walletAddress: address ?? null,   // needed by CRE to call settle(buyer, seller, ...)
         trade: {
           side,
-          tokenPair,
+          token,        // Same token for both parties
           amount,
           price,
         },
+        token,                // ETH or WLD (both parties use same token)
+        chain,                // ethereum or worldChain (auto-determined)
         timestamp: Date.now(),
       }
       console.log('[6/6] Submitting trade to /api/trade...')
+      console.log('      Token:', token, '| Chain:', chainName)
+      console.log('      ⚠️  SAME-TOKEN TRADE: Both parties deposit/receive', token)
       console.log('      Wallet address (for settlement):', address ?? 'not connected')
       console.log('      On-chain ZK tx:', onChainTxHash ?? '(simulation — no tx)')
       console.log('      Trade payload:', tradeData.trade)
@@ -306,24 +320,28 @@ export function OrderForm({ nullifierHash, worldIdProof, onOrderSubmitted }: Ord
         </button>
       </div>
 
-      {/* Token Pair */}
+      {/* Token Selection */}
       <div className="flex flex-col gap-1.5">
-        <label className={labelClass}>Token Pair</label>
+        <label className={labelClass}>Token</label>
         <select
-          value={tokenPair}
-          onChange={e => setTokenPair(e.target.value)}
+          value={token}
+          onChange={e => setToken(e.target.value as 'ETH' | 'WLD')}
           className={inputClass}
         >
-          {TOKEN_PAIRS.map(pair => (
-            <option key={pair} value={pair}>{pair}</option>
+          {TOKENS.map(t => (
+            <option key={t} value={t}>{t}</option>
           ))}
         </select>
+        <div className="text-[9px] font-mono text-muted-foreground px-1">
+          ⛓️ Chain: <span className="text-foreground">{chainName}</span>
+          <span className="ml-2 text-[8px] text-muted-foreground/70">• Both parties use {token}</span>
+        </div>
       </div>
 
       {/* Amount */}
       <div className="flex flex-col gap-1.5">
         <label className={labelClass}>
-          Amount ({tokenPair.split('/')[side === 'buy' ? 1 : 0]})
+          Amount ({token})
         </label>
         <input
           type="number"
@@ -335,12 +353,15 @@ export function OrderForm({ nullifierHash, worldIdProof, onOrderSubmitted }: Ord
           step="any"
           className={inputClass}
         />
+        <div className="text-[8px] font-mono text-muted-foreground/70 px-1">
+          {side === 'buy' ? 'You deposit' : 'You deposit'} {token} • Counterparty deposits {token}
+        </div>
       </div>
 
       {/* Limit Price */}
       <div className="flex flex-col gap-1.5">
         <label className={labelClass}>
-          Limit Price ({tokenPair.split('/')[1]} / {tokenPair.split('/')[0]})
+          Price (per {token})
         </label>
         <input
           type="number"
@@ -352,6 +373,9 @@ export function OrderForm({ nullifierHash, worldIdProof, onOrderSubmitted }: Ord
           step="any"
           className={inputClass}
         />
+        <div className="text-[8px] font-mono text-muted-foreground/70 px-1">
+          Matching parameter • Both parties must agree on rate
+        </div>
       </div>
 
       {/* Expiry */}
@@ -371,6 +395,11 @@ export function OrderForm({ nullifierHash, worldIdProof, onOrderSubmitted }: Ord
       {/* Privacy notice */}
       <p className="text-[10px] font-mono text-muted-foreground text-center leading-relaxed">
         // intent encrypted client-side · only hash stored on-chain · CRE-matched
+      </p>
+      
+      {/* ZK Proof requirement notice */}
+      <p className="text-[9px] font-mono text-yellow-500/80 text-center leading-relaxed border border-yellow-500/30 bg-yellow-500/5 px-3 py-2 rounded">
+        ⚠️ You will be asked to approve a ZK balance proof transaction. This is required for settlement.
       </p>
 
       {error && (
