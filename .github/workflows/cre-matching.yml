@@ -20,10 +20,9 @@ jobs:
           node-version: '20'
       
       - name: Install CRE CLI
-        run: curl -sSL /install.sh | bash
-      
-      - name: Add CRE to PATH
-        run: echo "$HOME/.cre/bin" >> $GITHUB_PATH
+        run: |
+          curl -fsSL https://cre.chain.link/install.sh | bash
+          echo "$HOME/.cre/bin" >> $GITHUB_PATH
       
       - name: Install dependencies
         working-directory: ./privotc-cre/my-workflow
@@ -38,7 +37,7 @@ jobs:
         working-directory: ./privotc-cre/my-workflow
         run: |
           echo "🔄 Fetching and matching trades from Vercel..."
-          cre workflow simulate . --project-root . --target privotc-staging --trigger-index 2 --non-interactive
+          $HOME/.cre/bin/cre workflow simulate . --project-root . --target privotc-staging --trigger-index 2 --non-interactive
       
       - name: Log results
         run: echo "✅ Matching complete at $(date)"
