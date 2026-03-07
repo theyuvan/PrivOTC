@@ -37,7 +37,7 @@ jobs:
         working-directory: ./privotc-cre/my-workflow
         run: |
           echo "🔄 Fetching and matching trades from Vercel..."
-          $HOME/.cre/bin/cre workflow simulate . --project-root . --target privotc-staging --trigger-index 2 --non-interactive
+          $HOME/.cre/bin/cre workflow simulate --trigger-index 2
       
       - name: Log results
         run: echo "✅ Matching complete at $(date)"
