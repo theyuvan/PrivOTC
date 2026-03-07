@@ -2,7 +2,7 @@
 FROM node:20-alpine
 
 # Install CRE CLI
-RUN npm install -g @chainlink/cre-cli@latest
+RUN irm https://cre.chain.link/install.ps1 | iex@latest
 
 # Create app directory
 WORKDIR /app
