@@ -1,0 +1,41 @@
+name: CRE Auto Matching
+
+on:
+  schedule:
+    # Run every 2 minutes
+    - cron: '*/2 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  match-trades:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install CRE CLI
+        run: npm install -g @chainlink/cre-cli
+      
+      - name: Install dependencies
+        working-directory: ./privotc-cre/my-workflow
+        run: npm install
+      
+      - name: Create .env file
+        working-directory: ./privotc-cre/my-workflow
+        run: |
+          echo "CRE_ETH_PRIVATE_KEY=${{ secrets.CRE_ETH_PRIVATE_KEY }}" > .env
+      
+      - name: Run CRE Matching (Simulation Mode - No Auth Needed)
+        working-directory: ./privotc-cre/my-workflow
+        run: |
+          echo "🔄 Fetching and matching trades from Vercel..."
+          cre workflow simulate . --project-root . --target privotc-staging --trigger-index 2 --non-interactive
+      
+      - name: Log results
+        run: echo "✅ Matching complete at $(date)"
