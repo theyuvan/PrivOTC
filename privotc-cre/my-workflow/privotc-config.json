@@ -1,6 +1,6 @@
 {
   "schedule": "*/30 * * * * *",
-  "simulationMode": true,
+  "simulationMode": false,
   "worldIdAppId": "app_staging_356707253a6f729610327063d51fe46e",
   "worldIdAction": "submit_trade",
   "otcSettlementAddress": "0x41A580044F41C9D6BDe5821A4dF5b664A09cc370",
@@ -11,7 +11,7 @@
   "chainId": "9991",
   "tenderlyRpcUrl": "https://virtual.mainnet.eu.rpc.tenderly.co/9b993a3b-a915-4d11-9283-b43800cd39a5",
   "gasLimit": "500000",
-  "frontendApiUrl": "http://localhost:3000/api/trade",
+  "frontendApiUrl": "https://chain-phi-seven.vercel.app/api/trade",
   "zkVerifierUrl": "http://localhost:4000/verify",
   "adminApiKey": "hackathon-demo-2026"
 }
