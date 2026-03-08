@@ -36,7 +36,7 @@ Traditional OTC platforms expose sensitive trading data (balances, order books, 
 
 ## 📺 Pitch Deck
 
-> **[▶️ Watch 3-Minute Demo](https://www.canva.com/design/DAHDVaHx79g/ak6mkb_7gh8uWXkFMuvynA/edit?utm_content=DAHDVaHx79g&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
+> **[▶️ View](https://www.canva.com/design/DAHDVaHx79g/ak6mkb_7gh8uWXkFMuvynA/edit?utm_content=DAHDVaHx79g&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
 )**
 
 ## 📚 Detailed Technical Documentation
