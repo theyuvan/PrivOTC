@@ -17,7 +17,7 @@ This document provides comprehensive sequence diagrams for the PrivOTC platform,
 ```mermaid
 sequenceDiagram
     actor User as 👤 User
-    participant MiniApp as 🌐 World Mini App<br/>(Next.js Frontend)
+    participant Frontend as 🌐 Frontend<br/>(Next.js)
     participant WorldID as 🌍 World ID<br/>(IDKit)
     participant ZKCircuit as 🔐 ZK Circuit<br/>(Circom + snarkjs)
     participant API as 📡 Frontend API<br/>(/api/trade)
@@ -28,25 +28,25 @@ sequenceDiagram
     
     %% Phase 1: User Authentication & Proof Generation
     Note over User,WorldID: Phase 1: Identity Verification
-    User->>MiniApp: 1. Click "Create Trade"
-    MiniApp->>WorldID: 2. Request World ID verification
+    User->>Frontend: 1. Click "Create Trade"
+    Frontend->>WorldID: 2. Request World ID verification
     WorldID->>User: 3. Show QR code / biometric prompt
     User->>WorldID: 4. Scan QR / complete verification
-    WorldID->>MiniApp: 5. Return proof {merkle_root, nullifier_hash, proof}
+    WorldID->>Frontend: 5. Return proof {merkle_root, nullifier_hash, proof}
     
     Note over User,ZKCircuit: Phase 2: ZK Balance Proof
-    MiniApp->>User: 6. Request wallet signature
-    User->>MiniApp: 7. Sign message with wallet
-    MiniApp->>ZKCircuit: 8. Generate ZK proof<br/>{balance, requiredAmount, salt}
+    Frontend->>User: 6. Request wallet signature
+    User->>Frontend: 7. Sign message with wallet
+    Frontend->>ZKCircuit: 8. Generate ZK proof<br/>{balance, requiredAmount, salt}
     ZKCircuit->>ZKCircuit: 9. Compile witness<br/>(~200ms)
     ZKCircuit->>ZKCircuit: 10. Generate Groth16 proof<br/>(~500ms)
-    ZKCircuit->>MiniApp: 11. Return ZK proof<br/>{pi_a, pi_b, pi_c, publicSignals}
+    ZKCircuit->>Frontend: 11. Return ZK proof<br/>{pi_a, pi_b, pi_c, publicSignals}
     
-    Note over MiniApp,API: Phase 3: Trade Submission
-    MiniApp->>API: 12. POST /api/trade {<br/>  worldIdProof,<br/>  zkProof,<br/>  tradeIntent {side, token, amount, price}<br/>}
+    Note over Frontend,API: Phase 3: Trade Submission
+    Frontend->>API: 12. POST /api/trade {<br/>  worldIdProof,<br/>  zkProof,<br/>  tradeIntent {side, token, amount, price}<br/>}
     API->>API: 13. Validate request format
     API->>API: 14. Store in trade queue
-    API->>MiniApp: 15. Return {tradeId, status: "pending"}
+    API->>Frontend: 15. Return {tradeId, status: "pending"}
     
     Note over CRE,Orderbook: Phase 4: CRE Auto-Trigger
     CRE->>CRE: 16. Auto-trigger service polls (every 10s)
@@ -61,13 +61,13 @@ sequenceDiagram
     
     alt World ID or ZK Proof Invalid
         CRE->>API: 23a. POST /api/trade-status<br/>{tradeId, status: "rejected"}
-        API->>MiniApp: 24a. WebSocket: Trade rejected
-        MiniApp->>User: 25a. Show error message
+        API->>Frontend: 24a. WebSocket: Trade rejected
+        Frontend->>User: 25a. Show error message
     else Proofs Valid
         CRE->>Orderbook: 23b. Add to confidential orderbook<br/>{walletCommitment, hash(trade)}
         Orderbook->>CRE: 24b. Order stored (encrypted in TEE)
         CRE->>API: 25b. POST /api/trade-status<br/>{tradeId, status: "active"}
-        API->>MiniApp: 26b. WebSocket: Trade active
+        API->>Frontend: 26b. WebSocket: Trade active
     end
     
     Note over CRE,Matching: Phase 6: Matching Engine (CRE Handler 1)
@@ -87,19 +87,19 @@ sequenceDiagram
         Matching->>Matching: 34b. Create MatchedPair<br/>{buyOrder, sellOrder, matchPrice, matchAmount}
         Matching->>Orderbook: 35. Remove matched orders
         Matching->>API: 36. POST /api/matches {<br/>  matchId,<br/>  buyerAddress,<br/>  sellerAddress,<br/>  amount,<br/>  price<br/>}
-        API->>MiniApp: 37. WebSocket: Match found!
-        MiniApp->>User: 38. Notification: "Match found!"
+        API->>Frontend: 37. WebSocket: Match found!
+        Frontend->>User: 38. Notification: "Match found!"
     end
     
     Note over User,Blockchain: Phase 7: Escrow Deposits
-    User->>MiniApp: 39. View match details
-    MiniApp->>User: 40. Show "Deposit Escrow" button
-    User->>MiniApp: 41. Click "Deposit to Escrow"
-    MiniApp->>Blockchain: 42. Call depositToEscrow()<br/>{matchId, amount}
+    User->>Frontend: 39. View match details
+    Frontend->>User: 40. Show "Deposit Escrow" button
+    User->>Frontend: 41. Click "Deposit to Escrow"
+    Frontend->>Blockchain: 42. Call depositToEscrow()<br/>{matchId, amount}
     User->>Blockchain: 43. Confirm transaction (MetaMask)
     Blockchain->>Blockchain: 44. Transfer tokens to EscrowVault
-    Blockchain->>MiniApp: 45. Event: EscrowDeposited
-    MiniApp->>User: 46. "Waiting for counterparty..."
+    Blockchain->>Frontend: 45. Event: EscrowDeposited
+    Frontend->>User: 46. "Waiting for counterparty..."
     
     Note over User,Blockchain: Phase 8: Settlement Trigger
     par Buyer deposits
@@ -114,14 +114,14 @@ sequenceDiagram
     CRE->>CRE: 50. Execute Handler 3 (Settlement)
     CRE->>Blockchain: 51. Call executeSettlement(matchId)
     Blockchain->>Blockchain: 52. Atomic swap:<br/>- Release buyer's tokens to seller<br/>- Release seller's tokens to buyer
-    Blockchain->>MiniApp: 53. Event: TradeSettled
-    MiniApp->>User: 54. 🎉 "Trade completed successfully!"
+    Blockchain->>Frontend: 53. Event: TradeSettled
+    Frontend->>User: 54. 🎉 "Trade completed successfully!"
     
     Note over User,Blockchain: Phase 9: Post-Settlement
-    User->>MiniApp: 55. View transaction history
-    MiniApp->>Blockchain: 56. Query past trades
-    Blockchain->>MiniApp: 57. Return settlement events
-    MiniApp->>User: 58. Show trade history
+    User->>Frontend: 55. View transaction history
+    Frontend->>Blockchain: 56. Query past trades
+    Blockchain->>Frontend: 57. Return settlement events
+    Frontend->>User: 58. Show trade history
 ```
 
 ---
@@ -144,91 +144,81 @@ sequenceDiagram
     Note over AutoTrigger,Handler3: CRE runs 4 workflows in TEE environment
     
     %% Auto-Trigger Service
-    rect rgb(200, 255, 200)
-        Note over AutoTrigger: Auto-Trigger Service (Always Running)
-        loop Every 10 seconds
-            AutoTrigger->>Frontend: GET /api/trade?drain=false
-            Frontend->>AutoTrigger: {buyOrders: N, sellOrders: M}
-            
-            alt N > 0 AND M > 0
-                AutoTrigger->>Handler2: Trigger Handler 2 (Pull & Match)
-            else No matching orders
-                Note over AutoTrigger: Wait for next poll cycle
-            end
+    Note over AutoTrigger: Auto-Trigger Service (Always Running)
+    loop Every 10 seconds
+        AutoTrigger->>Frontend: GET /api/trade?drain=false
+        Frontend->>AutoTrigger: {buyOrders: N, sellOrders: M}
+        
+        alt N > 0 AND M > 0
+            AutoTrigger->>Handler2: Trigger Handler 2 (Pull & Match)
+        else No matching orders
+            Note over AutoTrigger: Wait for next poll cycle
         end
     end
     
     %% Handler 0: Trade Intake
-    rect rgb(230, 230, 255)
-        Note over Handler0,TEE: Handler 0: Trade Intake (On-demand)
-        Frontend->>Handler0: HTTP Trigger: New trade submission
-        Handler0->>Handler0: 1. Verify World ID proof
-        Handler0->>Handler0: 2. Verify ZK balance proof
-        
-        alt Verification Failed
-            Handler0->>Frontend: Return {status: "rejected", reason}
-        else Verification Passed
-            Handler0->>TEE: 3. Store in orderbook (encrypted)
-            TEE->>Handler0: Order ID
-            Handler0->>Frontend: Return {status: "active", orderId}
-        end
+    Note over Handler0,TEE: Handler 0: Trade Intake (On-demand)
+    Frontend->>Handler0: HTTP Trigger: New trade submission
+    Handler0->>Handler0: 1. Verify World ID proof
+    Handler0->>Handler0: 2. Verify ZK balance proof
+    
+    alt Verification Failed
+        Handler0->>Frontend: Return {status: "rejected", reason}
+    else Verification Passed
+        Handler0->>TEE: 3. Store in orderbook (encrypted)
+        TEE->>Handler0: Order ID
+        Handler0->>Frontend: Return {status: "active", orderId}
     end
     
     %% Handler 1: Auto Matching (Deprecated - replaced by Handler 2)
-    rect rgb(255, 240, 200)
-        Note over Handler1: Handler 1: Auto Matching (Deprecated)<br/>Now using Handler 2 + Auto-Trigger instead
-    end
+    Note over Handler1: Handler 1: Auto Matching (Deprecated)<br/>Now using Handler 2 + Auto-Trigger instead
     
     %% Handler 2: Pull & Match
-    rect rgb(255, 220, 220)
-        Note over Handler2,Chain: Handler 2: Pull & Match (Primary Matching)
-        Handler2->>Frontend: 1. GET /api/trade?drain=true
-        Frontend->>Handler2: 2. Return pending trades array
-        
-        loop For each trade
-            Handler2->>Handler2: 3. Verify World ID + ZK proof
-            alt Valid
-                Handler2->>TEE: 4. Add to orderbook
-            else Invalid
-                Handler2->>Frontend: 5. POST /api/trade-status {rejected}
-            end
+    Note over Handler2,Chain: Handler 2: Pull & Match (Primary Matching)
+    Handler2->>Frontend: 1. GET /api/trade?drain=true
+    Frontend->>Handler2: 2. Return pending trades array
+    
+    loop For each trade
+        Handler2->>Handler2: 3. Verify World ID + ZK proof
+        alt Valid
+            Handler2->>TEE: 4. Add to orderbook
+        else Invalid
+            Handler2->>Frontend: 5. POST /api/trade-status {rejected}
         end
-        
-        Handler2->>TEE: 6. Query buy orders
-        TEE->>Handler2: 7. Encrypted buy orders
-        Handler2->>TEE: 8. Query sell orders
-        TEE->>Handler2: 9. Encrypted sell orders
-        
-        Handler2->>Handler2: 10. Price-time matching algorithm<br/>(confidential in TEE)
-        
-        alt Matches Found
-            loop For each match
-                Handler2->>TEE: 11. Remove from orderbook
-                Handler2->>Frontend: 12. POST /api/matches {matchDetails}
-                Frontend->>Frontend: 13. Notify users via WebSocket
-            end
-        else No Matches
-            Note over Handler2: Orders remain in orderbook
+    end
+    
+    Handler2->>TEE: 6. Query buy orders
+    TEE->>Handler2: 7. Encrypted buy orders
+    Handler2->>TEE: 8. Query sell orders
+    TEE->>Handler2: 9. Encrypted sell orders
+    
+    Handler2->>Handler2: 10. Price-time matching algorithm<br/>(confidential in TEE)
+    
+    alt Matches Found
+        loop For each match
+            Handler2->>TEE: 11. Remove from orderbook
+            Handler2->>Frontend: 12. POST /api/matches {matchDetails}
+            Frontend->>Frontend: 13. Notify users via WebSocket
         end
+    else No Matches
+        Note over Handler2: Orders remain in orderbook
     end
     
     %% Handler 3: Manual Match Trigger
-    rect rgb(240, 220, 255)
-        Note over Handler3,Chain: Handler 3: Manual Match (Admin/Testing)
-        Frontend->>Handler3: HTTP POST /manual-match<br/>{buyOrderId, sellOrderId, apiKey}
-        Handler3->>Handler3: 1. Verify admin API key
-        Handler3->>TEE: 2. Get specific orders
-        TEE->>Handler3: 3. Return order details
-        Handler3->>Handler3: 4. Validate compatibility<br/>(price, amount, token)
-        
-        alt Compatible
-            Handler3->>TEE: 5. Create match
-            Handler3->>TEE: 6. Remove from orderbook
-            Handler3->>Frontend: 7. POST /api/matches
-            Handler3->>Chain: 8. Optional: Trigger settlement
-        else Incompatible
-            Handler3->>Frontend: 9. Return error
-        end
+    Note over Handler3,Chain: Handler 3: Manual Match (Admin/Testing)
+    Frontend->>Handler3: HTTP POST /manual-match<br/>{buyOrderId, sellOrderId, apiKey}
+    Handler3->>Handler3: 1. Verify admin API key
+    Handler3->>TEE: 2. Get specific orders
+    TEE->>Handler3: 3. Return order details
+    Handler3->>Handler3: 4. Validate compatibility<br/>(price, amount, token)
+    
+    alt Compatible
+        Handler3->>TEE: 5. Create match
+        Handler3->>TEE: 6. Remove from orderbook
+        Handler3->>Frontend: 7. POST /api/matches
+        Handler3->>Chain: 8. Optional: Trigger settlement
+    else Incompatible
+        Handler3->>Frontend: 9. Return error
     end
 ```
 
@@ -408,12 +398,10 @@ sequenceDiagram
     
     Settlement->>Escrow: 22. Atomic swap execution
     
-    rect rgb(200, 255, 200)
-        Note over Escrow: CRITICAL: All-or-nothing transaction
-        Escrow->>Escrow: 23. releaseToRecipient(buyer → seller, amount)
-        Escrow->>Escrow: 24. releaseToRecipient(seller → buyer, amount)
-        Escrow->>Escrow: 25. Mark deposits as released
-    end
+    Note over Escrow: CRITICAL: All-or-nothing transaction
+    Escrow->>Escrow: 23. releaseToRecipient(buyer → seller, amount)
+    Escrow->>Escrow: 24. releaseToRecipient(seller → buyer, amount)
+    Escrow->>Escrow: 25. Mark deposits as released
     
     alt Settlement Successful
         Settlement->>Settlement: 26a. Update match status = "settled"
@@ -503,7 +491,7 @@ graph TB
     end
     
     subgraph Frontend["🌐 Frontend (Next.js)"]
-        MiniApp["World Mini App"]
+        App["Trading Interface"]
         WorldIDKit["World ID Kit"]
         ZKGen["ZK Proof Generator<br/>(Client-side)"]
         WalletConnect["Wallet Connection<br/>(RainbowKit)"]
@@ -535,15 +523,15 @@ graph TB
     end
     
     %% User interactions
-    Buyer --> MiniApp
-    Seller --> MiniApp
+    Buyer --> App
+    Seller --> App
     
     %% Frontend connections
-    MiniApp --> WorldIDKit
-    MiniApp --> ZKGen
-    MiniApp --> WalletConnect
-    MiniApp --> TradeAPI
-    MiniApp --> MatchAPI
+    App --> WorldIDKit
+    App --> ZKGen
+    App --> WalletConnect
+    App --> TradeAPI
+    App --> MatchAPI
     
     %% World ID verification
     WorldIDKit --> WorldIDService
@@ -578,7 +566,7 @@ graph TB
     classDef externalClass fill:#fce4ec,stroke:#880e4f,stroke-width:2px
     
     class Buyer,Seller userClass
-    class MiniApp,WorldIDKit,ZKGen,WalletConnect frontendClass
+    class App,WorldIDKit,ZKGen,WalletConnect frontendClass
     class AutoTrigger,Handler0,Handler2,Handler3,Orderbook,MatchEngine creClass
     class Settlement,Escrow,Verifier blockchainClass
     class WorldIDService externalClass
