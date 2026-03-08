@@ -5,15 +5,17 @@
   "private": true,
   "workspaces": [
     "contracts",
-    "app",
-    "cre"
+    "frontend",
+    "cre",
+    "privotc-cre",
+    "zk-circuits"
   ],
   "scripts": {
     "contracts:compile": "cd contracts && npm run compile",
     "contracts:test": "cd contracts && npm run test",
     "contracts:deploy": "cd contracts && npm run deploy",
-    "app:dev": "cd app && npm run dev",
-    "app:build": "cd app && npm run build"
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build"
   },
   "keywords": [
     "defi",
