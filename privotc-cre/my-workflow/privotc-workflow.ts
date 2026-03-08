@@ -53,6 +53,9 @@ const configSchema = z.object({
 	frontendApiUrl: z.string().optional(), // For testing: CRE can pull from localhost:3000
 	zkVerifierUrl: z.string().optional(), // URL for ZK verification service (e.g., http://localhost:4000/verify)
 	adminApiKey: z.string().optional(), // API key for manual matching trigger
+	groqApiKey: z.string().optional(), // Groq AI API key for intelligent matching (FREE!)
+	useAIMatching: z.boolean().optional(), // Enable AI-powered matching (default: true if groqApiKey set)
+	aiConfidenceThreshold: z.number().optional(), // Minimum AI confidence (0-1, default: 0.7)
 });
 
 type Config = z.infer<typeof configSchema>;
@@ -96,6 +99,93 @@ interface ZKProof {
 	publicSignals: string[];
 }
 
+// ===== AI Matching Helper (Groq API) =====
+
+/**
+ * AI-powered trade compatibility evaluation using Groq API (FREE!)
+ * Runs confidentially inside TEE environment
+ */
+async function evaluateTradeCompatibilityWithAI(
+	runtime: Runtime<Config>,
+	buy: TradeIntent,
+	sell: TradeIntent
+): Promise<{ match: boolean; confidence: number; reason: string }> {
+	const groqApiKey = runtime.config.groqApiKey;
+	
+	if (!groqApiKey) {
+		// Fallback to rule-based (basic checks)
+		return { match: true, confidence: 1.0, reason: 'Rule-based matching (no AI configured)' };
+	}
+
+	const systemPrompt = `You are an expert OTC trade matcher for decentralized finance running in a Trusted Execution Environment (TEE).
+Your role is to evaluate if two trades should be matched based on:
+- Asset compatibility
+- Price fairness (considering market conditions)
+- Amount feasibility
+- Timing considerations
+- Risk assessment
+
+Respond with ONLY a JSON object: {"match": true/false, "confidence": 0-1, "reason": "brief explanation"}`;
+
+	const userPrompt = `Evaluate this trade match:
+
+BUY ORDER:
+- User: ${buy.walletCommitment.substring(0, 10)}...
+- Asset: ${buy.token}
+- Amount: ${buy.amount}
+- Max Price: $${buy.price}
+- Timestamp: ${new Date(buy.timestamp).toISOString()}
+
+SELL ORDER:
+- User: ${sell.walletCommitment.substring(0, 10)}...
+- Asset: ${sell.token}
+- Amount: ${sell.amount}
+- Min Price: $${sell.price}
+- Timestamp: ${new Date(sell.timestamp).toISOString()}
+
+Should these trades be matched?`;
+
+	try {
+		const httpClient = new ConfidentialHTTPClient();
+		
+		const response = httpClient.sendRequest(runtime, {
+			vaultDonSecrets: [],
+			request: {
+				url: 'https://api.groq.com/openai/v1/chat/completions',
+				method: 'POST',
+				multiHeaders: {
+					'Authorization': { values: [`Bearer ${groqApiKey}`] },
+					'Content-Type': { values: ['application/json'] }
+				},
+				bodyString: JSON.stringify({
+					model: 'llama-3.1-70b-versatile',
+					messages: [
+						{ role: 'system', content: systemPrompt },
+						{ role: 'user', content: userPrompt }
+					],
+					temperature: 0.3,
+					max_tokens: 200
+				})
+			}
+		}).result();
+
+		if (!ok(response)) {
+			runtime.log(`⚠️ Groq API error: ${response.statusCode}, falling back to rule-based`);
+			return { match: true, confidence: 1.0, reason: 'API error - rule-based fallback' };
+		}
+
+		const data = json(response) as any;
+		const aiResponse = JSON.parse(data.choices[0].message.content);
+		
+		runtime.log(`🧠 Groq AI Decision: ${aiResponse.match ? '✅ MATCH' : '❌ NO MATCH'} (${(aiResponse.confidence * 100).toFixed(0)}% confidence) - ${aiResponse.reason}`);
+		
+		return aiResponse;
+	} catch (error) {
+		runtime.log(`⚠️ AI evaluation failed: ${error}, using rule-based fallback`);
+		return { match: true, confidence: 1.0, reason: 'AI error - rule-based fallback' };
+	}
+}
+
 // ===== In-Memory Confidential Orderbook (TEE Storage) =====
 
 class ConfidentialOrderbook {
@@ -129,10 +219,14 @@ class ConfidentialOrderbook {
 		return { success: true };
 	}
 
-	findMatches(token: string): MatchedPair[] {
+	async findMatches(runtime: Runtime<Config>, token: string): Promise<MatchedPair[]> {
 		const buyOrders = this.buyOrders.get(token) || [];
 		const sellOrders = this.sellOrders.get(token) || [];
 		const matches: MatchedPair[] = [];
+		const useAI = runtime.config.useAIMatching !== false && runtime.config.groqApiKey;
+		const aiThreshold = runtime.config.aiConfidenceThreshold || 0.7;
+
+		runtime.log(`🔍 Matching ${buyOrders.length} buy orders vs ${sellOrders.length} sell orders (AI: ${useAI ? 'enabled' : 'disabled'})`);
 
 		let buyIdx = 0, sellIdx = 0;
 
@@ -142,12 +236,41 @@ class ConfidentialOrderbook {
 			const buyPrice = parseFloat(buyOrder.price);
 			const sellPrice = parseFloat(sellOrder.price);
 
+			// Basic price compatibility check
 			if (buyPrice >= sellPrice) {
-				const matchPrice = sellOrder.timestamp < buyOrder.timestamp ? sellOrder.price : buyOrder.price;
-				const matchAmount = Math.min(parseFloat(buyOrder.amount), parseFloat(sellOrder.amount)).toString();
-				matches.push({ buyOrder, sellOrder, matchPrice, matchAmount, matchTimestamp: Date.now() });
-				buyIdx++;
-				sellIdx++;
+				let shouldMatch = true;
+				
+				// AI-powered compatibility evaluation (runs in TEE!)
+				if (useAI) {
+					const aiResult = await evaluateTradeCompatibilityWithAI(runtime, buyOrder, sellOrder);
+					shouldMatch = aiResult.match && aiResult.confidence >= aiThreshold;
+					
+					if (!shouldMatch) {
+						runtime.log(`   ❌ AI rejected match: ${aiResult.reason}`);
+						// Skip this pair and continue
+						sellIdx++;
+						continue;
+					}
+				}
+				
+				if (shouldMatch) {
+					// Calculate fair match price (seller's price for first-come-first-served)
+					const matchPrice = sellOrder.timestamp < buyOrder.timestamp ? sellOrder.price : buyOrder.price;
+					const matchAmount = Math.min(parseFloat(buyOrder.amount), parseFloat(sellOrder.amount)).toString();
+					
+					matches.push({ 
+						buyOrder, 
+						sellOrder, 
+						matchPrice, 
+						matchAmount, 
+						matchTimestamp: Date.now() 
+					});
+					
+					runtime.log(`   ✅ Match created: ${matchAmount} ${token} @ ${matchPrice}`);
+					
+					buyIdx++;
+					sellIdx++;
+				}
 			} else {
 				break;
 			}
@@ -377,7 +500,7 @@ async function validateZKProof(
 /**
  * Matching Engine Logic (Extracted for reuse)
  */
-function runMatchingEngine(runtime: Runtime<Config>): { matchesFound: number; details: string; matches: MatchedPair[] } {
+async function runMatchingEngine(runtime: Runtime<Config>): Promise<{ matchesFound: number; details: string; matches: MatchedPair[] }> {
 	const config = runtime.config;
 	const tokens = config.tokenPairs; // Still named tokenPairs in config but contains single tokens now
 	const allMatches: MatchedPair[] = [];
@@ -392,7 +515,7 @@ function runMatchingEngine(runtime: Runtime<Config>): { matchesFound: number; de
 			continue;
 		}
 
-		const matches = orderbook.findMatches(token);
+		const matches = await orderbook.findMatches(runtime, token);
 		if (matches.length > 0) {
 			runtime.log(`   ✅ Found ${matches.length} matches`);
 			allMatches.push(...matches);
@@ -492,11 +615,11 @@ const handleTradeIntake = async (
  * Cron Handler: Matching Engine
  * Runs every N seconds, finds matching buy/sell orders
  */
-const handleMatchingEngine = (runtime: Runtime<Config>, payload: CronPayload): string => {
+const handleMatchingEngine = async (runtime: Runtime<Config>, payload: CronPayload): Promise<string> => {
 	const mode = runtime.config.simulationMode ? 'SIMULATION' : 'PRODUCTION';
 	runtime.log(`🎯 Running matching engine (${mode})...`);
 
-	const result = runMatchingEngine(runtime);
+	const result = await runMatchingEngine(runtime);
 	return result.details;
 };
 
@@ -725,7 +848,7 @@ const handleFetchFromFrontend = async (
 
 		// Immediately run matching after pulling trades (prevents orderbook loss between simulations)
 		runtime.log(`\n🎯 Running matching engine on fresh orderbook...`);
-		const matchingResult = runMatchingEngine(runtime);
+		const matchingResult = await runMatchingEngine(runtime);
 
 		// POST each match to the frontend /api/matches so the UI can show the escrow flow
 		if (matchingResult.matches.length > 0) {
@@ -847,7 +970,7 @@ const handleManualMatch = async (
 			continue;
 		}
 
-		const matches = orderbook.findMatches(tokenPair);
+		const matches = await orderbook.findMatches(runtime, tokenPair);
 		if (matches.length > 0) {
 			runtime.log(`   ✅ Found ${matches.length} matches`);
 			allMatches.push(...matches);

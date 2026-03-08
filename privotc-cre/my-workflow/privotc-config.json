@@ -13,5 +13,8 @@
   "gasLimit": "500000",
   "frontendApiUrl": "http://localhost:3000/api/trade",
   "zkVerifierUrl": "http://localhost:4000/verify",
-  "adminApiKey": "hackathon-demo-2026"
+  "adminApiKey": "hackathon-demo-2026",
+  "groqApiKey": "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",
+  "useAIMatching": true,
+  "aiConfidenceThreshold": 0.7
 }
