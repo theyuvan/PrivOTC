@@ -1,4 +1,4 @@
-# PrivOTC — AI-Powered Privacy-Preserving OTC Trading Platform
+# PrivOTC — Human-Verified Confidential OTC Trading Protocol
 
 > **Chainlink CRE + Groq AI + World ID + ZK-SNARKs + Tenderly Virtual TestNets**
 
@@ -28,11 +28,16 @@ Traditional OTC platforms expose sensitive trading data (balances, order books, 
 
 ## 📺 Demo Video
 
-> **[▶️ Watch 3-Minute Demo](YOUR_VIDEO_LINK_HERE)**
+> **[▶️ Watch 5-Minute Demo](https://youtu.be/ypqXQCJlOC0?si=8l4U1q9BgJhQk3jq)**
 >
 > *Showcases end-to-end workflow: World ID verification → ZK proof generation → AI matching in TEE → On-chain settlement*
 
 ---
+
+## 📺 Pitch Deck
+
+> **[▶️ Watch 3-Minute Demo](https://www.canva.com/design/DAHDVaHx79g/ak6mkb_7gh8uWXkFMuvynA/edit?utm_content=DAHDVaHx79g&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton
+)**
 
 ## 📚 Detailed Technical Documentation
 
