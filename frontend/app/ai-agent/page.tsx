@@ -3,7 +3,7 @@ import { CREAutoTriggerControls } from '@/components/cre/CREAutoTriggerControls'
 
 export const metadata = {
   title: 'AI Matching Agent - PrivOTC',
-  description: 'CRE auto-trigger + AI-powered OTC trade matching',
+  description: 'Automatic CRE auto-trigger + AI-powered OTC trade matching',
 }
 
 export default function AIAgentPage() {
@@ -14,7 +14,7 @@ export default function AIAgentPage() {
         <div className="container mx-auto px-4 py-6">
           <h1 className="text-3xl font-bold">🤖 Automated Matching System</h1>
           <p className="text-muted-foreground mt-2">
-            CRE Auto-Trigger + Groq AI Integration • No Manual Commands Required
+            CRE Auto-Trigger + Groq AI Integration • Runs Automatically 24/7 • No Manual Control Needed
           </p>
         </div>
       </div>
@@ -23,13 +23,13 @@ export default function AIAgentPage() {
       <div className="container mx-auto px-4 py-8 space-y-8">
         {/* CRE Auto-Trigger (Main System) */}
         <div>
-          <h2 className="text-xl font-semibold mb-4">🎯 CRE Auto-Trigger Service (Production)</h2>
+          <h2 className="text-xl font-semibold mb-4">🎯 CRE Auto-Trigger Service (Always Running)</h2>
           <CREAutoTriggerControls />
         </div>
 
         {/* AI Matching Agent (Secondary/Optional) */}
         <div>
-          <h2 className="text-xl font-semibold mb-4">🧠 Frontend AI Agent (Optional Enhancement)</h2>
+          <h2 className="text-xl font-semibold mb-4">🧠 Frontend AI Agent (Always Running)</h2>
           <AIMatchingAgentStatus />
         </div>
       </div>

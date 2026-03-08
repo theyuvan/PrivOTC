@@ -301,8 +301,9 @@ class CREAutoTriggerService {
 // Global singleton instance
 export const creAutoTriggerService = new CREAutoTriggerService()
 
-// Auto-start service if in server environment
+// Auto-start service in server environment (runs automatically)
 if (typeof window === 'undefined') {
-  // Server-side only
-  console.log('🤖 CRE Auto-Trigger Service ready (call .start() to begin)')
+  // Server-side only - auto-start on app startup
+  console.log('🤖 CRE Auto-Trigger Service starting automatically...')
+  creAutoTriggerService.start()
 }

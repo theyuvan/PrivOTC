@@ -1,19 +1,17 @@
 /**
- * CRE Auto-Trigger Controls
+ * CRE Auto-Trigger Status Display
  * 
- * UI component to control the CRE auto-trigger service
+ * Displays status of the CRE auto-trigger service
  * that automatically runs: cre workflow simulate --trigger-index 2
  * 
- * Replaces manual command execution workflow
+ * Service auto-starts on app launch - no manual control needed
  */
 
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Slider } from '@/components/ui/slider'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface CREStatus {
@@ -29,7 +27,6 @@ interface CREStatus {
 
 export function CREAutoTriggerControls() {
   const [status, setStatus] = useState<CREStatus | null>(null)
-  const [loading, setLoading] = useState(false)
   const [pollInterval, setPollInterval] = useState(10000) // 10 seconds default
 
   // Fetch status
@@ -52,32 +49,6 @@ export function CREAutoTriggerControls() {
     const interval = setInterval(fetchStatus, 2000) // Update every 2 seconds
     return () => clearInterval(interval)
   }, [])
-
-  const handleAction = async (action: string, config?: any) => {
-    setLoading(true)
-    try {
-      const response = await fetch('/api/cre-trigger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, config })
-      })
-      const data = await response.json()
-      if (data.success) {
-        setStatus(data.status)
-        console.log(`CRE Action: ${action}`, data)
-      }
-    } catch (error) {
-      console.error(`Failed to ${action} CRE service:`, error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handlePollIntervalChange = async (value: number[]) => {
-    const newInterval = value[0]
-    setPollInterval(newInterval)
-    await handleAction('configure', { pollInterval: newInterval })
-  }
 
   if (!status) {
     return (
@@ -132,62 +103,24 @@ export function CREAutoTriggerControls() {
           <div>    --non-interactive</div>
         </div>
 
-        {/* Controls */}
-        <div className="flex gap-2">
-          {!status.running ? (
-            <Button 
-              onClick={() => handleAction('start')}
-              disabled={loading}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              ▶️ Start Service
-            </Button>
-          ) : (
-            <Button 
-              onClick={() => handleAction('stop')}
-              disabled={loading}
-              variant="destructive"
-            >
-              ⏹️ Stop Service
-            </Button>
-          )}
-          
-          <Button 
-            onClick={() => handleAction('restart')}
-            disabled={loading}
-            variant="outline"
-          >
-            🔄 Restart
-          </Button>
-
-          <Button 
-            onClick={() => handleAction('trigger')}
-            disabled={loading || status.executing}
-            variant="secondary"
-          >
-            🔧 Manual Trigger
-          </Button>
-        </div>
-
-        {/* Poll Interval Control */}
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <label className="text-sm font-medium">Poll Interval</label>
-            <span className="text-sm text-gray-500">{pollInterval / 1000} seconds</span>
-          </div>
-          <Slider
-            value={[pollInterval]}
-            onValueChange={handlePollIntervalChange}
-            min={5000}
-            max={60000}
-            step={5000}
-            disabled={loading}
-            className="w-full"
-          />
-          <p className="text-xs text-gray-500">
-            How often to check for pending trades (5-60 seconds)
-          </p>
-        </div>
+        {/* Auto-Running Status */}
+        <Alert className={status.running ? "border-green-500 bg-green-50" : "border-gray-300"}>
+          <AlertDescription className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-3 h-3 rounded-full ${status.running ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+              <div>
+                <div className="font-semibold text-gray-900">
+                  {status.executing ? '⚙️ Executing CRE Workflow...' : status.running ? '✅ Service Running Automatically' : '⚠️ Service Stopped'}
+                </div>
+                <div className="text-sm text-gray-600">
+                  {status.running 
+                    ? `Checking for trades every ${pollInterval / 1000} seconds • No manual intervention needed`
+                    : 'Service should auto-start on app launch'}
+                </div>
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
 
         {/* How It Works */}
         <div className="border-t pt-4">

@@ -2,11 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Play, Pause, RefreshCw, Settings, Zap } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Zap } from 'lucide-react'
 
 interface AutoMatchStatus {
   running: boolean
@@ -18,15 +16,12 @@ interface AutoMatchStatus {
 
 export function AutoMatchingControls() {
   const [status, setStatus] = useState<AutoMatchStatus | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [pollInterval, setPollInterval] = useState(5000)
 
   const fetchStatus = async () => {
     try {
       const res = await fetch('/api/auto-match')
       const data = await res.json()
       setStatus(data)
-      setPollInterval(data.pollInterval || 5000)
     } catch (err) {
       console.error('Failed to fetch status:', err)
     }
@@ -37,27 +32,6 @@ export function AutoMatchingControls() {
     const interval = setInterval(fetchStatus, 2000)
     return () => clearInterval(interval)
   }, [])
-
-  const handleAction = async (action: string, config?: any) => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/auto-match', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, config })
-      })
-      const data = await res.json()
-      setStatus(data.status)
-    } catch (err) {
-      console.error('Action failed:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const updatePollInterval = () => {
-    handleAction('configure', { pollInterval })
-  }
 
   if (!status) {
     return (
@@ -92,7 +66,7 @@ export function AutoMatchingControls() {
         <div className="grid grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
           <div>
             <div className="text-sm text-muted-foreground">Status</div>
-            <div className="font-medium">{status.running ? 'Running' : 'Stopped'}</div>
+            <div className="font-medium">{status.running ? '✅ Running' : '⚠️ Stopped'}</div>
           </div>
           <div>
             <div className="text-sm text-muted-foreground">Poll Interval</div>
@@ -104,66 +78,22 @@ export function AutoMatchingControls() {
           </div>
         </div>
 
-        {/* Control Buttons */}
-        <div className="flex gap-2">
-          {!status.running ? (
-            <Button
-              onClick={() => handleAction('start')}
-              disabled={loading}
-              className="flex-1"
-              size="lg"
-            >
-              <Play className="h-4 w-4 mr-2" />
-              Start Auto-Matching
-            </Button>
-          ) : (
-            <Button
-              onClick={() => handleAction('stop')}
-              disabled={loading}
-              variant="destructive"
-              className="flex-1"
-              size="lg"
-            >
-              <Pause className="h-4 w-4 mr-2" />
-              Stop Auto-Matching
-            </Button>
-          )}
-          
-          <Button
-            onClick={() => handleAction('restart')}
-            disabled={loading}
-            variant="outline"
-            size="lg"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Restart
-          </Button>
-        </div>
-
-        {/* Configuration */}
-        <div className="space-y-2">
-          <Label htmlFor="pollInterval" className="flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            Poll Interval (milliseconds)
-          </Label>
-          <div className="flex gap-2">
-            <Input
-              id="pollInterval"
-              type="number"
-              value={pollInterval}
-              onChange={(e) => setPollInterval(parseInt(e.target.value))}
-              min="1000"
-              step="1000"
-              className="flex-1"
-            />
-            <Button onClick={updatePollInterval} variant="outline">
-              Update
-            </Button>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            How often to check for new trades (default: 5000ms = 5 seconds)
-          </p>
-        </div>
+        {/* Auto-Running Status Message */}
+        <Alert className={status.running ? "border-green-500 bg-green-50" : "border-gray-300"}>
+          <AlertDescription className="flex items-center gap-3">
+            <div className={`w-3 h-3 rounded-full ${status.running ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+            <div>
+              <div className="font-semibold text-gray-900">
+                {status.running ? '✅ Auto-Matching Active' : '⚠️ Service Stopped'}
+              </div>
+              <div className="text-sm text-gray-600">
+                {status.running 
+                  ? `Automatically checking for matches every ${status.pollInterval / 1000} seconds`
+                  : 'Service should auto-start on app launch'}
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
 
         {/* How It Works */}
         <div className="border-t pt-4 space-y-2">
