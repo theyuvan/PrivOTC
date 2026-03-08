@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { CHAIN_CONFIG } from '@/lib/chainConfig'
+import { toast } from 'sonner'
 
 // ── Minimal ABIs ────────────────────────────────────────────────────────────
 const ERC20_ABI = parseAbi([
@@ -113,13 +114,36 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
         }),
       })
       const data = await res.json()
+      
       if (data.settled) {
         setSettleTxHash(data.txHash ?? '')
         setStep('settled')
         onSettled?.()
+        
+        // Show settlement success toast
+        toast.success('🎉 Settlement Complete!', {
+          description: `Privacy transfer executed successfully. Funds have been settled on-chain.`,
+          duration: 7000,
+        })
+      } else if (data.error) {
+        // If settlement failed with an error
+        setStep('error')
+        setErrorMsg(data.error)
+        
+        toast.error('❌ Settlement Failed', {
+          description: data.error,
+          duration: 6000,
+        })
       }
-    } catch {
-      // silently retry
+    } catch (error: any) {
+      // Only show error toast for non-network errors
+      if (error?.message && !error?.message.includes('fetch')) {
+        toast.error('❌ Settlement Check Failed', {
+          description: error.message,
+          duration: 5000,
+        })
+      }
+      // Otherwise silently retry for network errors
     }
   }, [match, onSettled])
 
@@ -219,12 +243,25 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
         console.log('   Gas Used:', receipt.gasUsed.toString())
         console.log('   Status:', receipt.status)
         console.log('════════════════════════════════════════════════════\n')
+        
+        // Show success toast
+        toast.success('✅ Escrow Deposit Successful', {
+          description: `Deposited ${formatEther(BigInt(buyerAmount))} ${tradingToken} to escrow. Waiting for counterparty...`,
+          duration: 5000,
+        })
       }
 
       setStep('waiting')
     } catch (err: any) {
-      setErrorMsg(err.shortMessage ?? err.message)
+      const errorMessage = err.shortMessage ?? err.message
+      setErrorMsg(errorMessage)
       setStep('error')
+      
+      // Show error toast
+      toast.error('❌ Escrow Deposit Failed', {
+        description: errorMessage,
+        duration: 6000,
+      })
     }
   }
 
@@ -318,12 +355,25 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
         console.log('   Gas Used:', receipt.gasUsed.toString())
         console.log('   Status:', receipt.status)
         console.log('════════════════════════════════════════════════════\n')
+        
+        // Show success toast
+        toast.success('✅ Escrow Deposit Successful', {
+          description: `Deposited ${formatEther(BigInt(sellerAmount))} ${tradingToken} to escrow. Waiting for counterparty...`,
+          duration: 5000,
+        })
       }
 
       setStep('waiting')
     } catch (err: any) {
-      setErrorMsg(err.shortMessage ?? err.message)
+      const errorMessage = err.shortMessage ?? err.message
+      setErrorMsg(errorMessage)
       setStep('error')
+      
+      // Show error toast
+      toast.error('❌ Escrow Deposit Failed', {
+        description: errorMessage,
+        duration: 6000,
+      })
     }
   }
 
@@ -340,9 +390,22 @@ export function EscrowDeposit({ match, onSettled }: EscrowDepositProps) {
       })
       await publicClient.waitForTransactionReceipt({ hash: tx })
       setStep('expired')
+      
+      // Show refund success toast
+      toast.success('✅ Refund Processed', {
+        description: 'Your escrowed funds have been returned to your wallet.',
+        duration: 5000,
+      })
     } catch (err: any) {
-      setErrorMsg(err.shortMessage ?? err.message)
+      const errorMessage = err.shortMessage ?? err.message
+      setErrorMsg(errorMessage)
       setStep('error')
+      
+      // Show refund error toast
+      toast.error('❌ Refund Failed', {
+        description: errorMessage,
+        duration: 6000,
+      })
     }
   }
 
